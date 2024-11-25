@@ -88,6 +88,30 @@ def transcribe_api(audio_data):
     )
     return response.text
 
+def generate_corrected_transcript(system_prompt, transcribed_text):
+    model_options = ConfigManager.get_config_section('model_options')
+
+    client = OpenAI(
+        api_key=os.getenv('OPENAI_API_KEY') or None,
+        base_url=model_options['api']['base_url'] or 'https://api.openai.com/v1'
+    )
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        temperature=0,
+        messages=[
+            {
+                "role": "system",
+                "content": system_prompt
+            },
+            {
+                "role": "user",
+                "content": transcribed_text
+            }
+        ]
+    )
+    
+    return response.choices[0].message.content
+
 def post_process_transcription(transcription):
     """
     Apply post-processing to the transcription.
@@ -103,6 +127,7 @@ def post_process_transcription(transcription):
 
     return transcription
 
+system_prompt = "You are a helpful assistant for the individual Apostol from Bulgaria. Your task is to correct any spelling discrepancies in the transcribed text. Only add necessary punctuation such as periods, commas, and capitalization, and use only the context provided. If the text doesn't need correction, just send it."
 def transcribe(audio_data, local_model=None):
     """
     Transcribe audio date using the OpenAI API or a local model, depending on config.
@@ -115,5 +140,12 @@ def transcribe(audio_data, local_model=None):
     else:
         transcription = transcribe_local(audio_data, local_model)
 
+    ConfigManager.console_print('Transcription before correction:' + transcription)
+
+    if transcription:
+        transcription = generate_corrected_transcript( system_prompt, transcription)
+
+    ConfigManager.console_print('Transcription:' + transcription)
+    
     return post_process_transcription(transcription)
 
